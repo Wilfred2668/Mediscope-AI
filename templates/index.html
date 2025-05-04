@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediScope AI - Medicine Guide</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-pills"></i>
+                <h1>MediScope AI</h1>
+            </div>
+            <button id="theme-toggle" class="theme-toggle">
+                <i class="fas fa-sun"></i>
+                <i class="fas fa-moon"></i>
+            </button>
+        </header>
+
+        <main>
+            <div class="search-container">
+                <div class="search-header">
+                    <h2>Medicine Usage Guide</h2>
+                    <p class="subtitle">Get detailed instructions for any medicine by name or image</p>
+                </div>
+                
+                <form method="POST" class="search-form" id="search-form" enctype="multipart/form-data">
+                    <div class="input-section">
+                        <div class="input-group">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="medicine" name="medicine" placeholder="Enter medicine name...">
+                        </div>
+                        <div class="or-divider">
+                            <span>OR</span>
+                        </div>
+                        <div class="file-upload-container">
+                            <div class="upload-box" id="upload-box">
+                                <div class="upload-content">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <h3>Upload Medicine Image</h3>
+                                    <p>Drag & drop your image here or</p>
+                                    <div class="upload-options">
+                                        <label for="image" class="upload-btn">
+                                            <i class="fas fa-folder-open"></i>
+                                            Browse Files
+                                        </label>
+                                        <button type="button" class="paste-btn" id="paste-btn">
+                                            <i class="fas fa-paste"></i>
+                                            Paste Image
+                                        </button>
+                                    </div>
+                                    <p class="supported-formats">Supported formats: PNG, JPG, JPEG</p>
+                                </div>
+                                <input type="file" id="image" name="image" accept="image/*" class="file-upload-input">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="image-preview" class="image-preview" style="display: none;">
+                        <img id="preview" src="" alt="Uploaded Image">
+                        <button type="button" id="remove-image" class="remove-image-btn">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <button type="submit" class="search-button" id="search-button">
+                        <i class="fas fa-arrow-right"></i>
+                        Get Instructions
+                    </button>
+                </form>
+                {% if error %}
+                <div class="error-message">
+                    <i class="fas fa-exclamation-circle"></i>
+                    {{ error }}
+                </div>
+                {% endif %}
+            </div>
+
+            {% if result %}
+            <div class="result-container">
+                <div class="result-header">
+                    <h3>Usage Instructions</h3>
+                </div>
+                <div class="result-content">
+                    <p>{{ result }}</p>
+                </div>
+                <div class="audio-container">
+                    <div class="audio-player">
+                        <div class="waveform">
+                            <canvas class="waveform-canvas"></canvas>
+                            <div class="loading-wave">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                        <div class="audio-controls">
+                            <button class="play-pause-btn" id="play-pause-btn">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <div class="audio-progress-container" id="progress-container">
+                                <div class="audio-progress" id="audio-progress"></div>
+                            </div>
+                            <span class="audio-time" id="audio-time">00:00</span>
+                            <div class="volume-control">
+                                <button class="volume-btn" id="volume-btn">
+                                    <i class="fas fa-volume-up"></i>
+                                </button>
+                                <input type="range" class="volume-slider" id="volume-slider" min="0" max="100" value="100">
+                            </div>
+                        </div>
+                        <div class="additional-controls">
+                            <div class="speed-control">
+                                <button class="speed-btn" data-speed="0.5">0.5x</button>
+                                <button class="speed-btn" data-speed="1.0" class="active">1.0x</button>
+                                <button class="speed-btn" data-speed="1.5">1.5x</button>
+                                <button class="speed-btn" data-speed="2.0">2.0x</button>
+                            </div>
+                            <a href="{{ url_for('audio') }}?t={{ timestamp }}" class="download-btn" download="medicine_instructions.mp3">
+                                <i class="fas fa-download"></i>
+                                Download
+                            </a>
+                        </div>
+                    </div>
+                    <audio id="audio-player">
+                        <source src="{{ url_for('audio') }}?t={{ timestamp }}" type="audio/mpeg">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            </div>
+            {% endif %}
+        </main>
+
+        <footer>
+            <p>© 2024 MediScope AI. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+        
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', savedTheme);
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        });
+
+        // Image upload functionality
+        const uploadBox = document.getElementById('upload-box');
+        const imageInput = document.getElementById('image');
+        const imagePreview = document.getElementById('image-preview');
+        const previewImage = document.getElementById('preview');
+        const removeImageBtn = document.getElementById('remove-image');
+        const medicineInput = document.getElementById('medicine');
+        const pasteBtn = document.getElementById('paste-btn');
+
+        // Drag and drop functionality
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadBox.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadBox.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadBox.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight() {
+            uploadBox.classList.add('dragover');
+        }
+
+        function unhighlight() {
+            uploadBox.classList.remove('dragover');
+        }
+
+        uploadBox.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+
+        // File input change handler
+        imageInput.addEventListener('change', function(e) {
+            handleFiles(e.target.files);
+        });
+
+        // Paste functionality
+        pasteBtn.addEventListener('click', function() {
+            navigator.clipboard.read().then(clipboardItems => {
+                for (const clipboardItem of clipboardItems) {
+                    for (const type of clipboardItem.types) {
+                        if (type.startsWith('image/')) {
+                            clipboardItem.getType(type).then(blob => {
+                                const file = new File([blob], 'pasted-image.png', { type: type });
+                                handleFiles([file]);
+                            });
+                        }
+                    }
+                }
+            }).catch(err => {
+                console.error('Failed to read clipboard:', err);
+            });
+        });
+
+        function handleFiles(files) {
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        previewImage.src = e.target.result;
+                        imagePreview.style.display = 'block';
+                        // Clear the medicine input when image is uploaded
+                        medicineInput.value = '';
+                    }
+                    reader.readAsDataURL(file);
+                }
+            }
+        }
+
+        removeImageBtn.addEventListener('click', function() {
+            imageInput.value = '';
+            imagePreview.style.display = 'none';
+            previewImage.src = '';
+        });
+
+        // Form submission handling
+        const searchForm = document.getElementById('search-form');
+        searchForm.addEventListener('submit', function(e) {
+            const buttonIcon = document.querySelector('#search-button i');
+            buttonIcon.classList.remove('fa-arrow-right');
+            buttonIcon.classList.add('fa-spinner', 'fa-spin');
+            document.getElementById('search-button').disabled = true;
+        });
+
+        // Audio player functionality
+        const audioPlayer = document.getElementById('audio-player');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const progressContainer = document.getElementById('progress-container');
+        const audioProgress = document.getElementById('audio-progress');
+        const audioTime = document.getElementById('audio-time');
+        const volumeBtn = document.getElementById('volume-btn');
+        const volumeSlider = document.getElementById('volume-slider');
+        const waveformCanvas = document.querySelector('.waveform-canvas');
+        const loadingWave = document.querySelector('.loading-wave');
+        const speedButtons = document.querySelectorAll('.speed-btn');
+
+        // Audio context for waveform
+        let audioContext;
+        let analyser;
+        let dataArray;
+        let animationFrameId;
+
+        function initAudioContext() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 512;
+            const source = audioContext.createMediaElementSource(audioPlayer);
+            source.connect(analyser);
+            analyser.connect(audioContext.destination);
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+        }
+
+        function drawWaveform() {
+            if (!analyser) return;
+            
+            const canvas = waveformCanvas;
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            analyser.getByteTimeDomainData(dataArray);
+            
+            // Clear canvas with a subtle gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, 'rgba(108, 92, 231, 0.1)');
+            gradient.addColorStop(1, 'rgba(108, 92, 231, 0.05)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw the waveform with multiple layers for depth
+            const centerY = height / 2;
+            const barWidth = (width / dataArray.length) * 2.5;
+            let x = 0;
+            
+            // Draw the main waveform
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = `linear-gradient(90deg, ${getComputedStyle(document.documentElement).getPropertyValue('--gradient-start')}, ${getComputedStyle(document.documentElement).getPropertyValue('--gradient-end')})`;
+            
+            for (let i = 0; i < dataArray.length; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * height / 2;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, centerY + y);
+                } else {
+                    ctx.lineTo(x, centerY + y);
+                }
+                
+                x += barWidth;
+            }
+            ctx.stroke();
+            
+            // Draw the mirrored waveform
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = `linear-gradient(90deg, ${getComputedStyle(document.documentElement).getPropertyValue('--gradient-end')}, ${getComputedStyle(document.documentElement).getPropertyValue('--gradient-start')})`;
+            x = 0;
+            
+            for (let i = 0; i < dataArray.length; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * height / 2;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, centerY - y);
+                } else {
+                    ctx.lineTo(x, centerY - y);
+                }
+                
+                x += barWidth;
+            }
+            ctx.stroke();
+            
+            // Draw the bars for additional visual effect
+            x = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                const v = dataArray[i] / 128.0;
+                const barHeight = v * height / 2;
+                
+                // Create gradient for each bar
+                const barGradient = ctx.createLinearGradient(x, centerY - barHeight, x, centerY + barHeight);
+                barGradient.addColorStop(0, 'rgba(108, 92, 231, 0.3)');
+                barGradient.addColorStop(0.5, 'rgba(108, 92, 231, 0.1)');
+                barGradient.addColorStop(1, 'rgba(108, 92, 231, 0.3)');
+                
+                ctx.fillStyle = barGradient;
+                ctx.fillRect(x, centerY - barHeight, barWidth, barHeight * 2);
+                
+                x += barWidth;
+            }
+            
+            // Draw a subtle glow effect
+            ctx.shadowColor = 'rgba(108, 92, 231, 0.3)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            
+            if (!audioPlayer.paused) {
+                animationFrameId = requestAnimationFrame(drawWaveform);
+            }
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateProgress() {
+            const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+            audioProgress.style.width = `${progress}%`;
+            audioTime.textContent = formatTime(audioPlayer.currentTime);
+        }
+
+        function togglePlayPause() {
+            if (audioPlayer.paused) {
+                audioPlayer.play();
+                playPauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                if (!audioContext) {
+                    initAudioContext();
+                }
+                drawWaveform();
+                loadingWave.style.display = 'none';
+            } else {
+                audioPlayer.pause();
+                playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function setProgress(e) {
+            const width = this.clientWidth;
+            const clickX = e.offsetX;
+            const duration = audioPlayer.duration;
+            audioPlayer.currentTime = (clickX / width) * duration;
+        }
+
+        function toggleMute() {
+            audioPlayer.muted = !audioPlayer.muted;
+            volumeBtn.innerHTML = audioPlayer.muted ? 
+                '<i class="fas fa-volume-mute"></i>' : 
+                '<i class="fas fa-volume-up"></i>';
+        }
+
+        function setVolume() {
+            audioPlayer.volume = volumeSlider.value / 100;
+            volumeBtn.innerHTML = audioPlayer.volume === 0 ? 
+                '<i class="fas fa-volume-mute"></i>' : 
+                '<i class="fas fa-volume-up"></i>';
+        }
+
+        function setPlaybackSpeed(speed) {
+            audioPlayer.playbackRate = speed;
+            speedButtons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.speed === speed.toString()) {
+                    btn.classList.add('active');
+                }
+            });
+        }
+
+        // Event listeners
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        progressContainer.addEventListener('click', setProgress);
+        volumeBtn.addEventListener('click', toggleMute);
+        volumeSlider.addEventListener('input', setVolume);
+        audioPlayer.addEventListener('timeupdate', updateProgress);
+        audioPlayer.addEventListener('ended', () => {
+            playPauseBtn.innerHTML = '<i class="fas fa-play"></i>';
+            audioProgress.style.width = '0%';
+            cancelAnimationFrame(animationFrameId);
+        });
+
+        speedButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                setPlaybackSpeed(parseFloat(btn.dataset.speed));
+            });
+        });
+
+        // Initialize waveform canvas
+        waveformCanvas.width = waveformCanvas.offsetWidth;
+        waveformCanvas.height = waveformCanvas.offsetHeight;
+
+        // Show loading animation initially
+        loadingWave.style.display = 'flex';
+
+        // Input focus animation
+        const inputGroup = document.querySelector('.input-group');
+        const searchInput = document.getElementById('medicine');
+
+        searchInput.addEventListener('focus', () => {
+            inputGroup.classList.add('focused');
+        });
+
+        searchInput.addEventListener('blur', () => {
+            inputGroup.classList.remove('focused');
+        });
+
+        // Add loading state to result container
+        const resultContainer = document.querySelector('.result-container');
+        if (resultContainer) {
+            resultContainer.classList.add('animate-fade-in');
+        }
+    </script>
+</body>
+</html>
+
+
+
