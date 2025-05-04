@@ -1,13 +1,20 @@
 from PIL import Image
-import pytesseract
+import easyocr
+import os
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Initialize EasyOCR reader (this will download the model on first run)
+reader = easyocr.Reader(['en'])
 
 def extract_text_from_image(image_path):
     try:
-        image = Image.open(image_path)
-        text = pytesseract.image_to_string(image)
-        return text.strip()
+        # Read the image
+        result = reader.readtext(image_path)
+        
+        # Extract text from results
+        text = ' '.join([item[1] for item in result])
+        
+        return text.strip() if text else None
+            
     except Exception as e:
         print(f"Error in OCR: {e}")
         return None
