@@ -5,7 +5,6 @@ import re
 import os
 import time
 from tts import speak_text
-from ocr import extract_text_from_image
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -16,21 +15,23 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Configure Gemini
-genai.configure(api_key=os.getenv('GEMINI_API_KEY', "AIzaSyDbqPytq3qe7I71KWNmYgKhhEO8Xta9MKo"))
+# Use gemini-2.0-flash for image OCR
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', "AIzaSyDbqPytq3qe7I71KWNmYgKhhEO8Xta9MKo")
+genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 # Prompt Template
 PROMPT_TEMPLATE = """
 You are a healthcare assistant. The user will give you a medicine name.
 Your job is to return a short but complete usage guide including:
-Make unique start (dont start with only "Okay"), give responses like you are speaking
+Make unique start (dont start with only "Okay"), give response as a person is speaking
 
-1. Medicine Name
-2. Purpose / Condition it treats
-3. Dosage (for adults)
-4. When to take (before/after food, time of day)
-5. Warnings (if any)
-6. Common side effects
+Medicine Name
+Purpose / Condition it treats
+Dosage (for adults)
+When to take (before/after food, time of day)
+Warnings (if any)
+Common side effects
 
 Keep it under 100 words and very clear. Respond in plain, spoken English.
 Medicine: {}
@@ -65,11 +66,21 @@ def index():
                     filename = secure_filename(file.filename)
                     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                     file.save(filepath)
-                    
-                    # Extract text from image using OCR
-                    medicine_name = extract_text_from_image(filepath)
-                    if not medicine_name:
-                        error = "Could not extract text from the image. Please try again or enter the medicine name manually."
+                    try:
+                        # Read image as bytes
+                        with open(filepath, "rb") as img_file:
+                            image_bytes = img_file.read()
+                        # Use Gemini to extract text
+                        gemini_response = model.generate_content([
+                            "Extract all the text from this image.",
+                            {"mime_type": f"image/{filename.rsplit('.', 1)[1].lower()}", "data": image_bytes}
+                        ])
+                        medicine_name = gemini_response.text.strip()
+                        if not medicine_name:
+                            error = "Could not extract text from the image. Please try again or enter the medicine name manually."
+                            return render_template('index.html', result=result, audio_file=audio_file, timestamp=timestamp, error=error)
+                    except Exception as e:
+                        error = f"Error extracting text from image: {e}"
                         return render_template('index.html', result=result, audio_file=audio_file, timestamp=timestamp, error=error)
                 else:
                     error = "Invalid file type. Please upload a PNG, JPG, or JPEG image."
