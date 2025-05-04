@@ -1,19 +1,18 @@
-from flask import Flask, render_template, request, send_file, session, redirect, url_for, jsonify
+# app.py
+from flask import Flask, render_template, request, send_file, session, redirect, url_for
 import google.generativeai as genai
 import re
 import os
 import time
-from tts import speak_text, text_to_speech
+from tts import speak_text
 from ocr import extract_text_from_image
 from werkzeug.utils import secure_filename
-import json
-import tempfile
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-
+# Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Configure Gemini
@@ -101,79 +100,6 @@ def index():
 @app.route('/audio')
 def audio():
     return send_file('static/audio.mp3', mimetype='audio/mpeg')
-
-@app.route('/search', methods=['POST'])
-def search():
-    try:
-        medicine_name = None
-        
-        # Check for image upload
-        if 'image' in request.files:
-            image = request.files['image']
-            if image.filename:
-                # Create a temporary file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
-                    image.save(temp_file.name)
-                    medicine_name = extract_text_from_image(temp_file.name)
-                    os.unlink(temp_file.name)  # Clean up the temporary file
-                
-                if not medicine_name:
-                    return jsonify({'error': 'Could not extract text from image. Please try again or enter the medicine name manually.'})
-        
-        # If no image or image processing failed, check for text input
-        if not medicine_name and 'medicine' in request.form:
-            medicine_name = request.form['medicine'].strip()
-        
-        if not medicine_name:
-            return jsonify({'error': 'Please enter a medicine name or upload an image.'})
-        
-        # Search in medicine data
-        medicine_info = None
-        with open('meds.json', 'r', encoding='utf-8') as f:
-            medicine_data = json.load(f)
-        
-        for med in medicine_data:
-            if medicine_name.lower() in med['name'].lower():
-                medicine_info = med
-                break
-        
-        if not medicine_info:
-            return jsonify({'error': f'No information found for {medicine_name}.'})
-        
-        # Generate detailed instructions using Gemini
-        prompt = f"""Generate detailed usage instructions for {medicine_info['name']} based on this information:
-        Category: {medicine_info['category']}
-        Description: {medicine_info['description']}
-        Usage: {medicine_info['usage']}
-        
-        Include:
-        1. Proper dosage instructions
-        2. When to take the medicine
-        3. Important precautions
-        4. Possible side effects
-        5. Storage instructions
-        6. What to do if a dose is missed
-        
-        Format the response in clear, easy-to-understand language."""
-        
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(prompt)
-        detailed_instructions = response.text
-        
-        # Generate audio
-        audio_path = text_to_speech(detailed_instructions)
-        
-        return jsonify({
-            'name': medicine_info['name'],
-            'category': medicine_info['category'],
-            'description': medicine_info['description'],
-            'usage': medicine_info['usage'],
-            'detailed_instructions': detailed_instructions,
-            'audio_path': audio_path
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'An error occurred: {str(e)}'})
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 10000))
